@@ -82,7 +82,11 @@ hub for all design decisions, component usage, and style choices in the Echo Mus
 
 If a new feature needs a UI pattern not covered in `DESIGN.md`, create a minimal, Nothing-OS-inspired pattern rather than pulling from the official Material 3 guidelines.
 
-### Conventions worth following
+### Ambient Mode UI pattern
+
+- **Ambient Mode Canvas background:** Ambient Mode may render the currently resolved Canvas artwork as a full-screen video layer behind its existing album-art, lyrics, and metadata UI. Reuse `CanvasArtworkPlayer`, `CanvasArtworkPlaybackCache`, and `resolveCanvasArtwork()`; keep `AmbientGlowBackground` underneath as the no-Canvas fallback. The Canvas layer must follow the current player's playing state and must not intercept Ambient Mode gestures.
+
+## Conventions worth following
 
 - Kotlin official style: `val` over `var`, data classes for simple holders,
   sealed classes/interfaces for UI/playback state.
