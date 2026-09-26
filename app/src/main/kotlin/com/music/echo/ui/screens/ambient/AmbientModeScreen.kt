@@ -21,6 +21,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -50,7 +51,12 @@ import echo.music.iad1tya.utils.rememberPreference
 
 import echo.music.iad1tya.LocalPlayerConnection
 import echo.music.iad1tya.extensions.togglePlayPause
+import echo.music.iad1tya.ui.player.CanvasArtworkPlaybackCache
+import echo.music.iad1tya.ui.player.CanvasArtworkPlayer
 import echo.music.iad1tya.ui.player.InlineLyricsView
+import echo.music.iad1tya.ui.player.resolveCanvasArtwork
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlin.math.abs
 
 @Composable
@@ -58,6 +64,7 @@ fun AmbientModeScreen(navController: NavController) {
   val context = LocalContext.current
   val playerConnection = LocalPlayerConnection.current ?: return
   val mediaMetadata by playerConnection.mediaMetadata.collectAsState()
+  val isPlaying by playerConnection.isPlaying.collectAsState()
 
   val artScale by rememberPreference(AmbientArtScaleKey, 0.85f)
   val showTitle by rememberPreference(AmbientShowTitleKey, false)
@@ -139,6 +146,11 @@ fun AmbientModeScreen(navController: NavController) {
         )
       }
   ) {
+    AmbientCanvasBackground(
+      mediaMetadata = mediaMetadata,
+      isPlaying = isPlaying,
+      modifier = Modifier.fillMaxSize(),
+    )
     AmbientGlowBackground(mediaMetadata = mediaMetadata, modifier = Modifier.fillMaxSize())
     Row(
       modifier = Modifier.fillMaxSize().safeDrawingPadding(),
@@ -221,3 +233,49 @@ fun AmbientModeScreen(navController: NavController) {
     }
   }
 }
+
+@Composable
+private fun AmbientCanvasBackground(
+  mediaMetadata: echo.music.iad1tya.models.MediaMetadata?,
+  isPlaying: Boolean,
+  modifier: Modifier = Modifier,
+) {
+  val mediaId = mediaMetadata?.id
+  var artwork by remember(mediaId) {
+    mutableStateOf<echo.music.iad1tya.canvas.CanvasArtwork?>(null)
+  }
+
+  LaunchedEffect(mediaId) {
+    artwork = null
+    val metadata = mediaMetadata ?: return@LaunchedEffect
+
+    CanvasArtworkPlaybackCache.get(metadata.id)?.let {
+      artwork = it
+      return@LaunchedEffect
+    }
+
+    val resolved =
+      withContext(Dispatchers.IO) {
+        resolveCanvasArtwork(
+          songTitle = metadata.title?.toString().orEmpty(),
+          artistName = metadata.artist?.toString().orEmpty(),
+          albumName = metadata.albumTitle?.toString(),
+        )
+      }
+
+    if (resolved != null) {
+      CanvasArtworkPlaybackCache.put(metadata.id, resolved)
+      artwork = resolved
+    }
+  }
+
+  artwork?.let {
+    CanvasArtworkPlayer(
+      primaryUrl = it.animated,
+      fallbackUrl = it.videoUrl,
+      isPlaying = isPlaying,
+      modifier = modifier,
+    )
+  }
+}
+
