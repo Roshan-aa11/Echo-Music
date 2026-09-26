@@ -146,12 +146,12 @@ fun AmbientModeScreen(navController: NavController) {
         )
       }
   ) {
+    AmbientGlowBackground(mediaMetadata = mediaMetadata, modifier = Modifier.fillMaxSize())
     AmbientCanvasBackground(
       mediaMetadata = mediaMetadata,
       isPlaying = isPlaying,
       modifier = Modifier.fillMaxSize(),
     )
-    AmbientGlowBackground(mediaMetadata = mediaMetadata, modifier = Modifier.fillMaxSize())
     Row(
       modifier = Modifier.fillMaxSize().safeDrawingPadding(),
       verticalAlignment = Alignment.CenterVertically
