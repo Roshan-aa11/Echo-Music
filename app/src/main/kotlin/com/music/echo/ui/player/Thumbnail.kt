@@ -671,11 +671,6 @@ private fun ThumbnailItem(
           playerBackground != PlayerBackgroundStyle.APPLE_MUSIC
       ) {
         var canvasArtwork by remember(item.mediaId) { mutableStateOf<CanvasArtwork?>(null) }
-        var canvasFetchInFlight by remember(item.mediaId) { mutableStateOf(false) }
-        val storefront = remember {
-          val country = Locale.getDefault().country
-          if (country.length == 2) country.lowercase(Locale.ROOT) else "us"
-        }
 
         LaunchedEffect(item.mediaId) {
           CanvasArtworkPlaybackCache.get(item.mediaId)?.let { cached ->
@@ -683,125 +678,20 @@ private fun ThumbnailItem(
             return@LaunchedEffect
           }
 
-          if (canvasFetchInFlight) return@LaunchedEffect
-          canvasFetchInFlight = true
-
-          val fetched =
+          val metadata = item.metadata
+          val resolved =
             withContext(Dispatchers.IO) {
-              val metadata = item.metadata
-              val albumName = (metadata?.album?.title ?: item.mediaMetadata.albumTitle)?.toString()
-              val duration = metadata?.duration
-
-              val songTitleRaw = item.mediaMetadata.title?.toString() ?: ""
-              val artistNameRaw = item.mediaMetadata.artist?.toString() ?: ""
-
-              val songTitle = normalizeCanvasSongTitle(songTitleRaw)
-              val artistName = normalizeCanvasArtistName(artistNameRaw)
-
-              linkedSetOf(
-                  songTitle to artistName,
-                  songTitleRaw to artistName,
-                  songTitle to artistNameRaw,
-                  songTitleRaw to artistNameRaw,
-                )
-                .filter { (s, a) -> s.isNotBlank() && a.isNotBlank() }
-                .firstNotNullOfOrNull { (s, a) ->
-                  if (!albumName.isNullOrBlank()) {
-                    AppleMusicCanvasProvider.getByAlbumArtist(
-                        album = albumName,
-                        artist = a,
-                        storefront = storefront
-                      )
-                      ?.takeIf { !it.preferredAnimationUrl.isNullOrBlank() }
-                      ?.let {
-                        return@firstNotNullOfOrNull it
-                      }
-                  }
-
-                  echomusicCanvasProvider.getBySongArtist(song = s, artist = a)?.takeIf {
-                    !it.preferredAnimationUrl.isNullOrBlank()
-                  }
-                    ?: TidalCanvasProvider.getBySongArtist(song = s, artist = a, album = albumName)
-                      ?.takeIf { !it.preferredAnimationUrl.isNullOrBlank() }
-                    ?: AppleMusicCanvasProvider.getBySongArtist(
-                        song = s,
-                        artist = a,
-                        album = albumName,
-                        storefront = storefront
-                      )
-                      ?.takeIf { !it.preferredAnimationUrl.isNullOrBlank() }
-                }
+              resolveCanvasArtwork(
+                songTitle = item.mediaMetadata.title?.toString().orEmpty(),
+                artistName = item.mediaMetadata.artist?.toString().orEmpty(),
+                albumName = (metadata?.album?.title ?: item.mediaMetadata.albumTitle)?.toString(),
+              )
             }
 
-          val requestedArtist = item.mediaMetadata.artist?.toString() ?: ""
-          val requestedTitle = item.mediaMetadata.title?.toString() ?: ""
-
-          val validated =
-            fetched?.let { artwork ->
-              val resultArtist = artwork.artist
-              val resultName = artwork.name
-
-              val artistMatches =
-                if (resultArtist != null && requestedArtist.isNotBlank()) {
-                  val normalizedResult = normalizeCanvasArtistName(resultArtist)
-                  val normalizedRequested = normalizeCanvasArtistName(requestedArtist)
-                  resultArtist.contains(requestedArtist, ignoreCase = true) ||
-                    requestedArtist.contains(resultArtist, ignoreCase = true) ||
-                    normalizedResult.contains(normalizedRequested, ignoreCase = true) ||
-                    normalizedRequested.contains(normalizedResult, ignoreCase = true)
-                } else true
-
-              val requestedAlbum = item.mediaMetadata.albumTitle?.toString() ?: ""
-              val canvasAlbumName = artwork.albumName
-              val canvasSongName = artwork.name
-
-              val titleMatches =
-                when {
-                  canvasAlbumName != null && requestedAlbum.isNotBlank() -> {
-                    val normalizedCanvasAlbum = normalizeCanvasSongTitle(canvasAlbumName)
-                    val normalizedRequestedAlbum = normalizeCanvasSongTitle(requestedAlbum)
-                    canvasAlbumName.contains(requestedAlbum, ignoreCase = true) ||
-                      requestedAlbum.contains(canvasAlbumName, ignoreCase = true) ||
-                      normalizedCanvasAlbum.contains(normalizedRequestedAlbum, ignoreCase = true) ||
-                      normalizedRequestedAlbum.contains(normalizedCanvasAlbum, ignoreCase = true)
-                  }
-                  canvasSongName != null && requestedTitle.isNotBlank() -> {
-                    val normalizedCanvasSong = normalizeCanvasSongTitle(canvasSongName)
-                    val normalizedRequestedTitle = normalizeCanvasSongTitle(requestedTitle)
-                    val normalizedRequestedAlbum =
-                      if (requestedAlbum.isNotBlank()) normalizeCanvasSongTitle(requestedAlbum)
-                      else ""
-                    canvasSongName.contains(requestedTitle, ignoreCase = true) ||
-                      requestedTitle.contains(canvasSongName, ignoreCase = true) ||
-                      normalizedCanvasSong.contains(normalizedRequestedTitle, ignoreCase = true) ||
-                      normalizedRequestedTitle.contains(normalizedCanvasSong, ignoreCase = true) ||
-                      (requestedAlbum.isNotBlank() &&
-                        (canvasSongName.contains(requestedAlbum, ignoreCase = true) ||
-                          requestedAlbum.contains(canvasSongName, ignoreCase = true) ||
-                          normalizedCanvasSong.contains(
-                            normalizedRequestedAlbum,
-                            ignoreCase = true
-                          ) ||
-                          normalizedRequestedAlbum.contains(
-                            normalizedCanvasSong,
-                            ignoreCase = true
-                          )))
-                  }
-                  else -> true
-                }
-
-              if (artistMatches && titleMatches) {
-                artwork
-              } else {
-                null
-              }
-            }
-
-          canvasArtwork = validated
-          if (validated != null) {
-            CanvasArtworkPlaybackCache.put(item.mediaId, validated)
+          canvasArtwork = resolved
+          if (resolved != null) {
+            CanvasArtworkPlaybackCache.put(item.mediaId, resolved)
           }
-          canvasFetchInFlight = false
         }
 
         if (playerBackground != PlayerBackgroundStyle.APPLE_MUSIC) {
